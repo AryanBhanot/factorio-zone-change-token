@@ -18,11 +18,24 @@
     const SLOT_NAMES_KEY = '_rubydesicSaveNames'
 
     function setLS(key, value) {
-        localStorage.setItem(SLOT_NAMES_KEY, JSON.stringify(value))
+        localStorage.setItem(key, JSON.stringify(value))
     }
 
     function getLS(key) {
-        return JSON.parse(localStorage.getItem(SLOT_NAMES_KEY) ?? 'null')
+        return JSON.parse(localStorage.getItem(key) ?? 'null')
+    }
+
+    function waitFor(selector, timeoutMs = 15000) {
+        return new Promise(resolve => {
+            const start = Date.now()
+            const timer = setInterval(() => {
+                const element = document.querySelector(selector)
+                if (element || Date.now() - start > timeoutMs) {
+                    clearInterval(timer)
+                    resolve(element)
+                }
+            }, 100)
+        })
     }
 
     function makeCollapseButton(el, desc, id) {
@@ -54,6 +67,15 @@
         el.classList.add('collapse')
         return button
     }
+
+    async function initialize() {
+    const renderedControlContainer = await waitFor('section.control-container')
+    if (!renderedControlContainer) {
+        console.error('Factorio Zone Token: section.control-container never appeared')
+        return
+    }
+
+    await waitFor('#saves', 5000)
 
     const node = document.createElement('style')
     node.innerHTML = `
@@ -100,8 +122,7 @@
     document.head.appendChild(node)
 
     const currentToken = localStorage.getItem(USER_TOKEN_KEY)
-    const controlContainer = document.querySelector('section.control-container')
-    controlContainer.insertAdjacentHTML('beforebegin', `
+    renderedControlContainer.insertAdjacentHTML('beforebegin', `
         <div class="token-control flex-row">
             <button class="pure-button" id="changeToken">Change Token</button>
             <button class="pure-button" id="tokenHistory">Token History</button>
@@ -109,12 +130,18 @@
         </div>
     `)
 
+    const bar = document.querySelector('.token-control')
     const infoCollapse = makeCollapseButton(document.querySelector('section.info'), ' Info', 'info')
-    document.querySelector('.token-control').insertAdjacentElement('afterbegin', infoCollapse)
-    const tokenCollapse = makeCollapseButton(document.querySelector('.token-control > p'), '', 'token')
-    document.querySelector('.token-control').insertAdjacentElement('beforeend', tokenCollapse)
+    if (infoCollapse) bar.insertAdjacentElement('afterbegin', infoCollapse)
+    const tokenSection = document.querySelector('.token-control > p')
+    if (tokenSection) {
+        const tokenCollapse = makeCollapseButton(tokenSection, '', 'token')
+        document.querySelector('.token-control').insertAdjacentElement('beforeend', tokenCollapse)
+    }
 
     const saves = document.getElementById('saves')
+
+    if (saves) {
 
     function updateOption(option) {
         const saveNames = getLS(SLOT_NAMES_KEY) ?? {}
@@ -169,7 +196,11 @@
     div.classList.add('control-link')
     div.appendChild(rename)
 
-    document.getElementById('upload-link').parentElement.parentElement.append(div)
+    const uploadLink = document.getElementById('upload-link')
+    if (uploadLink) {
+        uploadLink.parentElement.parentElement.append(div)
+    }
+    }
 
     document.getElementById('tokenHistory').onclick = async () => {
         const history = JSON.parse(localStorage.getItem(TOKEN_HISTORY_KEY))
@@ -211,7 +242,7 @@
             text: 'Type reset for a new token'
         })).value
 
-        if (newToken === null) return
+        if (!newToken) return
 
         if (newToken.toLowerCase() === 'reset') {
             localStorage.removeItem(USER_TOKEN_KEY)
@@ -227,4 +258,7 @@
             location.reload()
         }
     }
+    }
+
+    initialize().catch(error => console.error('Factorio Zone Token failed:', error))
 })()
